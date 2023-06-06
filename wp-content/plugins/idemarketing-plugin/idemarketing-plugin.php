@@ -51,7 +51,7 @@ function idemarketing_plugin_custom_api_get_users_endpoint_callback($request) {
 // Custom API endpoint callback function to sync users
 function idemarketing_plugin_custom_api_sync_users_callback($request) {
     // Prepare the API request data
-    $api_url = 'https://macarfi.twentic.com/users/sync';
+    $api_url = 'https://macarfi.twentic.com/api/users/sync';
 
     $api_headers = array(
         'Authorization'    => 'Bearer 1|9ToWpO3FxJyrTAJyNkIsM16eHhkOqqwaCeYQVrH5',
@@ -59,10 +59,32 @@ function idemarketing_plugin_custom_api_sync_users_callback($request) {
         'Content-Type'     => 'application/json'
     );
 
+    $api_body = array(
+        'users' => array(
+            array(
+                'name'            => 'New',
+                'surname'         => 'User',
+                'email'           => 'testing@twentic.com',
+                'password'        => 'null',
+                'original_email'  => 'testing@twentic.com',
+                'username'        => 'testing',
+                'business_name'   => 'testing',
+                'country'         => 'Spain',
+                'zip_code'        => '08008',
+                'phone'           => '000000000',
+                'newsletter'      => true,
+                'partner'         => true,
+                'member'          => false
+            ),
+            // Add more users as needed
+        )
+    );
+
     // Send the API request
     $response = wp_remote_post($api_url, array(
         'method'  => 'POST',
         'headers' => $api_headers,
+        //'body'    => wp_json_encode($api_body),
     ));
 
     // Check if the API request was successful
