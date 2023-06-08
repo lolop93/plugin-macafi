@@ -130,6 +130,8 @@ function send_new_user_to_endpoint($user_id) {
     // Verificar si el usuario tiene el rol "VIP" para establecer el valor de "partner"
     $partner = in_array('vip', (array) $user->roles);
 
+    /* MUY IMPORTANTE, cuando un usuario se modifica desde el back, no se detectan los cambios de roles por tanto cuando se modifique un usuario*/
+
     // Construir el array de datos del usuario para enviar en el body de la solicitud
     $user_data = array(
         'name' => $user->first_name,
@@ -183,9 +185,12 @@ function send_new_user_to_endpoint($user_id) {
     }
 }
 
-// Función para enviar la actualización de perfil de usuario al endpoint
-function send_profile_update_to_endpoint($user_id, $old_user_data, $userdata) {
+// Hook para la creación de usuarios
+add_action('user_register', 'send_new_user_to_endpoint');
 
+
+// Función para enviar la actualización de perfil de usuario al endpoint
+function send_profile_update_to_endpoint($user_id, $old_user_data = null, $userdata = null) {
     // Eliminar la entrada de caché correspondiente a los datos del usuario
     wp_cache_delete($user_id, 'users');
 
@@ -210,8 +215,8 @@ function send_profile_update_to_endpoint($user_id, $old_user_data, $userdata) {
         'zip_code' => '',
         'phone' => '',
         'newsletter' => '',
-        'partner' => $partner,
-        'member' => true
+        'partner' => $partner ? true : '',
+        'member' => ''
     );
 
     $body = array('users' => array($user_data)); // Construir el cuerpo de la solicitud
@@ -223,14 +228,14 @@ function send_profile_update_to_endpoint($user_id, $old_user_data, $userdata) {
         'Content-Type' => 'application/json'
     );
 
-
-    error_log(print_r($user->roles,true));
-    error_log(print_r($userdata,true));
-    error_log(print_r($body,true));
-
+    /*error_log(print_r($user->roles, true));
+    error_log(print_r($userdata, true));
+    error_log(print_r($body, true));
+    exit();*/
 
     // Realizar la solicitud HTTP POST
-    /*$response = wp_remote_post('https://macarfi.twentic.com/api/users/sync', array(
+
+    $response = wp_remote_post('https://macarfi.twentic.com/api/users/sync', array(
         'method' => 'POST',
         'headers' => $headers,
         'body' => json_encode($body)
@@ -252,15 +257,21 @@ function send_profile_update_to_endpoint($user_id, $old_user_data, $userdata) {
             // La solicitud no tuvo éxito
             error_log('Error al enviar la actualización de perfil al endpoint. Código de respuesta: ' . $response_code);
         }
-    }*/
+    }
+
 }
 
-// Hook para la creación de usuarios
-add_action('user_register', 'send_new_user_to_endpoint');
-
-// Hook para la actualización del perfil de usuario
+// Hook para la actualización del perfil de usuario desde el panel de administración
 add_action('profile_update', 'send_profile_update_to_endpoint', 10, 3);
 
+// Hook para cuando se cambia el rol del usuario
+//add_action('set_user_role', 'send_profile_update_to_endpoint_roles', 10, 3);
+
+// Hook para la actualización del perfil de usuario desde el panel del frontend
+add_action('personal_options_update', 'send_profile_update_to_endpoint', 10, 3);
+
+// Hook para la actualización del perfil de usuario desde el panel de "Mi cuenta" de WooCommerce
+add_action('woocommerce_update_customer', 'send_profile_update_to_endpoint', 10, 1);
 
 
 /** FIN  Esto devuelve los usuarios cuando se crean o se modifican*/
@@ -271,16 +282,89 @@ add_action('profile_update', 'send_profile_update_to_endpoint', 10, 3);
 
 
 
-/*function scripts() {
-    // Cargar archivo de estilo personalizado
-    wp_enqueue_style( 'idemarketing-css', plugin_dir_url( __FILE__ ) . 'assets/idemarketing.css', array(), '1.0' );
-    //wp_enqueue_style( 'font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css', array(), '5.15.3' );
 
-    // Cargar archivo de JS personalizado
-    wp_enqueue_script( 'idemarketing-js', plugin_dir_url( __FILE__ ) . 'assets/idemarketing.js', array('jquery'), '1.0', true );
+
+
+
+
+
+
+//Prueba
+
+function send_updated_user_to_endpoint( $user_id, $role, $old_roles ) {
+    // Verificar si se han realizado cambios en los roles
+    if ( ! empty( array_diff( $role, $old_roles ) ) ) {
+        // Eliminar la entrada de caché correspondiente a los datos del usuario
+        wp_cache_delete( $user_id, 'users' );
+
+        // Obtener los datos del usuario actualizados
+        $user = get_userdata( $user_id );
+        $token = '1|9ToWpO3FxJyrTAJyNkIsM16eHhkOqqwaCeYQVrH5'; // Token de autorización
+
+        // Verificar si el usuario tiene el rol "VIP" para establecer el valor de "partner"
+        $partner = in_array( 'vip', (array) $user->roles );
+
+        // Construir el array de datos del usuario para enviar en el body de la solicitud
+        $user_data = array(
+            'name' => $user->first_name,
+            'surname' => $user->last_name,
+            'email' => $user->user_email,
+            'password' => base64_encode( $user->user_pass ),
+            'passwordMD5' => $user->user_pass,
+            'original_email' => $user->user_email,
+            'username' => $user->user_login,
+            'business_name' => '',
+            'country' => '',
+            'zip_code' => '',
+            'phone' => '',
+            'newsletter' => '',
+            'partner' => $partner,
+            'member' => true
+        );
+
+        $body = array( 'users' => array( $user_data ) ); // Construir el cuerpo de la solicitud
+
+        // Configurar los encabezados de la solicitud
+        $headers = array(
+            'Authorization' => 'Bearer ' . $token,
+            'X-Requested-With' => 'XMLHttpRequest',
+            'Content-Type' => 'application/json'
+        );
+
+        error_log( print_r( $user->roles, true ) );
+        error_log( print_r( $user_data, true ) );
+        error_log( print_r( $body, true ) );
+        exit();
+
+        // Realizar la solicitud HTTP POST
+        $response = wp_remote_post( 'https://macarfi.twentic.com/api/users/sync', array(
+            'method' => 'POST',
+            'headers' => $headers,
+            'body' => json_encode( $body )
+        ));
+
+        // Verificar la respuesta de la solicitud
+        if ( is_wp_error( $response ) ) {
+            // Ocurrió un error al realizar la solicitud
+            error_log( 'Error al enviar la actualización de perfil al endpoint: ' . $response->get_error_message() );
+        } else {
+            $response_code = wp_remote_retrieve_response_code( $response );
+            if ( $response_code === 200 ) {
+                // La actualización de perfil se envió exitosamente
+                error_log( 'Actualización de perfil enviada al endpoint con éxito.' );
+            } else {
+                // Hubo un error en el endpoint
+                error_log( 'Error en el endpoint: ' . $response_code );
+            }
+        }
+    }
 }
 
-add_action( 'wp_enqueue_scripts', 'scripts' );*/
+// Hook para actualizar el perfil de usuario después de cambiar los roles
+add_action( 'set_user_role', 'send_updated_user_to_endpoint', 10, 3 );
+
+
+
 
 ?>
 
