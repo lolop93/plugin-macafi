@@ -10,10 +10,10 @@ Version: 1.0
 
 // Register the custom API endpoints
 function idemarketing_plugin_custom_api_endpoints_init() {
-    register_rest_route('idemarketing/v1', '/users', array(
+    /*register_rest_route('idemarketing/v1', '/users', array(
         'methods'  => 'GET',
         'callback' => 'idemarketing_plugin_custom_api_get_users_endpoint_callback',
-    ));
+    ));*/
 
     register_rest_route('idemarketing/v1', '/sync-users', array(
         'methods'  => 'POST',
@@ -23,7 +23,7 @@ function idemarketing_plugin_custom_api_endpoints_init() {
 add_action('rest_api_init', 'idemarketing_plugin_custom_api_endpoints_init');
 
 // Custom API endpoint callback function
-function idemarketing_plugin_custom_api_get_users_endpoint_callback($request) {
+/*function idemarketing_plugin_custom_api_get_users_endpoint_callback($request) {
     // Get all registered users
     $users = get_users();
 
@@ -46,99 +46,228 @@ function idemarketing_plugin_custom_api_get_users_endpoint_callback($request) {
 
     // Return the response
     return rest_ensure_response($response);
-}
+}*/
 
-// Custom API endpoint callback function to sync users
+// Custom API endpoint callback function
 function idemarketing_plugin_custom_api_sync_users_callback($request) {
-    // Prepare the API request data
-    $api_url = 'https://macarfi.twentic.com/api/users/sync';
+    // Get the request body
+    $request_body = json_decode($request->get_body(), true);
 
-    $api_headers = array(
-        'Authorization'    => 'Bearer 1|9ToWpO3FxJyrTAJyNkIsM16eHhkOqqwaCeYQVrH5',
-        'X-Requested-With' => 'XMLHttpRequest',
-        'Content-Type'     => 'application/json'
-    );
+    // Check if the request body contains users
+    if (isset($request_body['users']) && is_array($request_body['users'])) {
+        // Loop through the users in the request body
+        foreach ($request_body['users'] as $user_data) {
+            // Check if the user already exists in WordPress based on the original_email
+            $existing_user = get_user_by('email', $user_data['original_email']);
 
-    $api_body = array(
-        'users' => array(
-            array(
-                'name'            => 'New',
-                'surname'         => 'User',
-                'email'           => 'testing@twentic.com',
-                'password'        => 'null',
-                'original_email'  => 'testing@twentic.com',
-                'username'        => 'testing',
-                'business_name'   => 'testing',
-                'country'         => 'Spain',
-                'zip_code'        => '08008',
-                'phone'           => '000000000',
-                'newsletter'      => true,
-                'partner'         => true,
-                'member'          => false
-            ),
-            // Add more users as needed
-        )
-    );
-
-    // Send the API request
-    $response = wp_remote_post($api_url, array(
-        'method'  => 'POST',
-        'headers' => $api_headers,
-        //'body'    => wp_json_encode($api_body),
-    ));
-
-    // Check if the API request was successful
-    if (is_wp_error($response)) {
-        return rest_ensure_response(array('error' => 'API request failed'));
-    }
-
-    // Get the API response data
-    $api_response = json_decode(wp_remote_retrieve_body($response), true);
-
-    // Check if the API response contains users
-    if (isset($api_response['users']) && is_array($api_response['users'])) {
-        // Loop through the API response users
-        foreach ($api_response['users'] as $api_user) {
-            // Check if the user already exists in WordPress
-            $existing_user = get_user_by('email', $api_user['original_email']);
             if ($existing_user) {
                 // Update the existing user
                 $user_id = $existing_user->ID;
-                $user_data = array(
+                $user_login = $user_data['username'];
+                $user_email = $user_data['email'];
+                $display_name = $user_data['name'] . ' ' . $user_data['surname'];
+
+                // Update user data
+                $user_data_update = array(
                     'ID'           => $user_id,
-                    'user_login'   => $api_user['username'],
-                    'user_email'   => $api_user['email'],
-                    'display_name' => $api_user['name'] . ' ' . $api_user['surname'],
+                    'user_login'   => $user_login,
+                    'user_email'   => $user_email,
+                    'display_name' => $display_name,
+                    'first_name' => $user_data['name'],
+                    'last_name' => $user_data['surname'],
                     // Update any additional user data as needed
                 );
-                wp_update_user($user_data);
+
+                // Check if the password is provided for an update
+                if (isset($user_data['password'])) {
+                    $user_data_update['user_pass'] = base64_decode($user_data['password']);
+                }
+
+                wp_update_user($user_data_update);
             } else {
                 // Create a new user
-                $new_user = array(
-                    'user_login'   => $api_user['username'],
-                    'user_email'   => $api_user['email'],
-                    'user_pass'    => base64_decode($api_user['password']),
-                    'display_name' => $api_user['name'] . ' ' . $api_user['surname'],
+                $user_login = $user_data['username'];
+                $user_email = $user_data['email'];
+                $user_password = base64_decode($user_data['password']);
+                $display_name = $user_data['name'] . ' ' . $user_data['surname'];
+
+                // Create user data
+                $user_data_create = array(
+                    'user_login'   => $user_login,
+                    'user_email'   => $user_email,
+                    'user_pass'    => $user_password,
+                    'display_name' => $display_name,
+                    'first_name' => $user_data['name'],
+                    'last_name' => $user_data['surname'],
                     // Add any additional user data as needed
                 );
-                $user_id = wp_insert_user($new_user);
-            }
 
-            // Assign roles to the user
-            $user = new WP_User($user_id);
-            $user->set_role('vip'); // Replace 'vip' with the desired role
+                $user_id = wp_insert_user($user_data_create);
+            }
 
             // Update any additional user data as needed
             // ...
-
-            // Update the user in the API response with the WordPress user ID
-            $api_user['wordpress_user_id'] = $user_id;
         }
     }
 
-    // Return the updated API response
-    return rest_ensure_response($api_response);
+    // Return a success response
+    return rest_ensure_response(array('message' => 'Users synchronized successfully.'));
 }
+
+
+
+
+
+
+/**  Esto devuelve los usuarios cuando se crean o se modifican*/
+
+// Función para enviar un nuevo usuario al endpoint
+function send_new_user_to_endpoint($user_id) {
+    // Obtener los datos del usuario creado
+    $user = get_userdata($user_id);
+    $token = '1|9ToWpO3FxJyrTAJyNkIsM16eHhkOqqwaCeYQVrH5'; // Token de autorización
+
+    // Verificar si el usuario tiene el rol "VIP" para establecer el valor de "partner"
+    $partner = in_array('vip', (array) $user->roles);
+
+    // Construir el array de datos del usuario para enviar en el body de la solicitud
+    $user_data = array(
+        'name' => $user->first_name,
+        'surname' => $user->last_name,
+        'email' => $user->user_email,
+        'password' => base64_encode($user->user_pass),
+        'passwordMD5' => $user->user_pass,
+        'original_email' => $user->user_email,
+        'username' => $user->user_login,
+        'business_name' => '',
+        'country' => '',
+        'zip_code' => '',
+        'phone' => '',
+        'newsletter' => '',
+        'partner' => $partner,
+        'member' => true
+    );
+
+    $body = array('users' => array($user_data)); // Construir el cuerpo de la solicitud
+
+    // Configurar los encabezados de la solicitud
+    $headers = array(
+        'Authorization' => 'Bearer ' . $token,
+        'X-Requested-With' => 'XMLHttpRequest',
+        'Content-Type' => 'application/json'
+    );
+
+    // Realizar la solicitud HTTP POST
+    $response = wp_remote_post('https://macarfi.twentic.com/api/users/sync', array(
+        'method' => 'POST',
+        'headers' => $headers,
+        'body' => json_encode($body)
+    ));
+
+    // Verificar la respuesta de la solicitud
+    if (is_wp_error($response)) {
+        // Ocurrió un error al realizar la solicitud
+        error_log('Error al enviar el usuario al endpoint: ' . $response->get_error_message());
+    } else {
+        $response_code = wp_remote_retrieve_response_code($response);
+        $response_body = wp_remote_retrieve_body($response);
+
+        // Verificar el código de respuesta y registrar el resultado en los registros
+        if ($response_code === 200) {
+            // La solicitud fue exitosa
+            error_log('Usuario enviado al endpoint correctamente. Respuesta: ' . $response_body);
+        } else {
+            // La solicitud no tuvo éxito
+            error_log('Error al enviar el usuario al endpoint. Código de respuesta: ' . $response_code);
+        }
+    }
+}
+
+// Función para enviar la actualización de perfil de usuario al endpoint
+function send_profile_update_to_endpoint($user_id, $old_user_data, $userdata) {
+
+    // Eliminar la entrada de caché correspondiente a los datos del usuario
+    wp_cache_delete($user_id, 'users');
+
+    // Obtener los datos del usuario modificado
+    $user = get_userdata($user_id);
+    $token = '1|9ToWpO3FxJyrTAJyNkIsM16eHhkOqqwaCeYQVrH5'; // Token de autorización
+
+    // Verificar si el usuario tiene el rol "VIP" para establecer el valor de "partner"
+    $partner = in_array('vip', (array) $user->roles);
+
+    // Construir el array de datos del usuario para enviar en el body de la solicitud
+    $user_data = array(
+        'name' => $user->first_name,
+        'surname' => $user->last_name,
+        'email' => $user->user_email,
+        'password' => base64_encode($user->user_pass),
+        'passwordMD5' => $user->user_pass,
+        'original_email' => $user->user_email,
+        'username' => $user->user_login,
+        'business_name' => '',
+        'country' => '',
+        'zip_code' => '',
+        'phone' => '',
+        'newsletter' => '',
+        'partner' => $partner,
+        'member' => true
+    );
+
+    $body = array('users' => array($user_data)); // Construir el cuerpo de la solicitud
+
+    // Configurar los encabezados de la solicitud
+    $headers = array(
+        'Authorization' => 'Bearer ' . $token,
+        'X-Requested-With' => 'XMLHttpRequest',
+        'Content-Type' => 'application/json'
+    );
+
+
+    error_log(print_r($user->roles,true));
+    error_log(print_r($userdata,true));
+    error_log(print_r($body,true));
+
+
+    // Realizar la solicitud HTTP POST
+    /*$response = wp_remote_post('https://macarfi.twentic.com/api/users/sync', array(
+        'method' => 'POST',
+        'headers' => $headers,
+        'body' => json_encode($body)
+    ));
+
+    // Verificar la respuesta de la solicitud
+    if (is_wp_error($response)) {
+        // Ocurrió un error al realizar la solicitud
+        error_log('Error al enviar la actualización de perfil al endpoint: ' . $response->get_error_message());
+    } else {
+        $response_code = wp_remote_retrieve_response_code($response);
+        $response_body = wp_remote_retrieve_body($response);
+
+        // Verificar el código de respuesta y registrar el resultado en los registros
+        if ($response_code === 200) {
+            // La solicitud fue exitosa
+            error_log('Actualización de perfil enviada al endpoint correctamente. Respuesta: ' . $response_body);
+        } else {
+            // La solicitud no tuvo éxito
+            error_log('Error al enviar la actualización de perfil al endpoint. Código de respuesta: ' . $response_code);
+        }
+    }*/
+}
+
+// Hook para la creación de usuarios
+add_action('user_register', 'send_new_user_to_endpoint');
+
+// Hook para la actualización del perfil de usuario
+add_action('profile_update', 'send_profile_update_to_endpoint', 10, 3);
+
+
+
+/** FIN  Esto devuelve los usuarios cuando se crean o se modifican*/
+
+
+
+
 
 
 
